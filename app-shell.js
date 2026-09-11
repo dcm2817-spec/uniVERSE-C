@@ -744,15 +744,17 @@
           '</div>' +
         '</form>' +
         '<div class="profile-links">' +
-          '<a href="#" class="profile-link">Saved materials</a>' +
-          '<a href="#" class="profile-link">My connections</a>' +
+          '<a href="#" class="profile-link" id="downloads-link">Downloaded</a>' +
+          '<a href="#" class="profile-link" id="connections-link">My connections</a>' +
           '<a href="#" class="profile-link" id="my-groups-link">My groups</a>' +
           '<a href="#" class="profile-link" id="settings-link">Settings</a>' +
           '<a href="login.html" id="logout-link" class="profile-link profile-link-danger">Log out</a>' +
         '</div>' +
       '</div>' +
       '<div id="groups-view" hidden></div>' +
-      '<div id="settings-view" hidden></div>';
+      '<div id="settings-view" hidden></div>' +
+      '<div id="downloads-view" hidden></div>' +
+      '<div id="connections-view" hidden></div>';
 
     const nameEl = wrap.querySelector("#profile-name");
     const schoolEl = wrap.querySelector("#profile-school-display");
@@ -1242,6 +1244,174 @@
 
         msgEl.textContent = "Signed out everywhere. Redirecting to log in...";
         setTimeout(function () { window.location.href = "login.html"; }, 1200);
+      });
+    }
+
+    // ---------- Downloaded ----------
+
+    const downloadsView = wrap.querySelector("#downloads-view");
+
+    wrap.querySelector("#downloads-link").addEventListener("click", function (e) {
+      e.preventDefault();
+      profileMain.hidden = true;
+      downloadsView.hidden = false;
+      renderDownloads(downloadsView);
+    });
+
+    async function renderDownloads(container) {
+      container.innerHTML =
+        '<a href="#" class="back-link" id="downloads-back">\u2190 Back to profile</a>' +
+        '<div class="view-heading"><h2>Downloaded</h2><p>Materials you\u2019ve downloaded, most recent first.</p></div>' +
+        '<div id="downloads-list"><p class="empty-state">Loading...</p></div>';
+
+      container.querySelector("#downloads-back").addEventListener("click", function (e) {
+        e.preventDefault();
+        downloadsView.hidden = true;
+        profileMain.hidden = false;
+      });
+
+      const listEl = container.querySelector("#downloads-list");
+      const { data: userRes } = await supabaseClient.auth.getUser();
+      const user = userRes.user;
+
+      const { data, error } = await supabaseClient
+        .from("material_downloads")
+        .select("downloaded_at, materials(id, title, course_code, school_name, file_path)")
+        .eq("profile_id", user.id)
+        .order("downloaded_at", { ascending: false });
+
+      if (error) {
+        listEl.innerHTML = '<p class="empty-state">Couldn\u2019t load your downloads right now.</p>';
+        return;
+      }
+
+      // Same material downloaded more than once should only show once,
+      // keeping the most recent download time (the list is already
+      // sorted newest-first, so the first occurrence wins).
+      const seen = new Set();
+      const items = [];
+      (data || []).forEach(function (row) {
+        if (!row.materials || seen.has(row.materials.id)) return;
+        seen.add(row.materials.id);
+        items.push({ material: row.materials, downloaded_at: row.downloaded_at });
+      });
+
+      if (items.length === 0) {
+        listEl.innerHTML = '<p class="empty-state">Nothing downloaded yet \u2014 materials you download will show up here.</p>';
+        return;
+      }
+
+      listEl.innerHTML = "";
+      items.forEach(function (item) {
+        const m = item.material;
+        const card = document.createElement("div");
+        card.className = "material-card";
+        card.innerHTML =
+          '<div>' +
+            '<p class="material-title">' + escapeHtml(m.title) + '</p>' +
+            '<p class="material-meta">' + escapeHtml(m.course_code || "General") + ' \u00B7 ' + escapeHtml(m.school_name || "") + '</p>' +
+          '</div>' +
+          '<span class="material-downloads">Open</span>';
+        card.addEventListener("click", async function () {
+          const { data: signed } = await supabaseClient
+            .storage
+            .from("materials")
+            .createSignedUrl(m.file_path, 60);
+          if (signed) window.open(signed.signedUrl, "_blank");
+        });
+        listEl.appendChild(card);
+      });
+    }
+
+    // ---------- My connections ----------
+
+    const connectionsView = wrap.querySelector("#connections-view");
+
+    wrap.querySelector("#connections-link").addEventListener("click", function (e) {
+      e.preventDefault();
+      profileMain.hidden = true;
+      connectionsView.hidden = false;
+      renderMyConnections(connectionsView);
+    });
+
+    async function renderMyConnections(container) {
+      container.innerHTML =
+        '<a href="#" class="back-link" id="connections-back">\u2190 Back to profile</a>' +
+        '<div class="view-heading"><h2>My connections</h2><p>Everyone you\u2019re connected with.</p></div>' +
+        '<div id="connections-list"><p class="empty-state">Loading...</p></div>';
+
+      container.querySelector("#connections-back").addEventListener("click", function (e) {
+        e.preventDefault();
+        connectionsView.hidden = true;
+        profileMain.hidden = false;
+      });
+
+      const listEl = container.querySelector("#connections-list");
+      const { data: userRes } = await supabaseClient.auth.getUser();
+      const user = userRes.user;
+
+      const { data: rows, error } = await supabaseClient
+        .from("connections")
+        .select("requester_id, receiver_id")
+        .eq("status", "accepted")
+        .or("requester_id.eq." + user.id + ",receiver_id.eq." + user.id);
+
+      if (error) {
+        listEl.innerHTML = '<p class="empty-state">Couldn\u2019t load your connections right now.</p>';
+        return;
+      }
+
+      const otherIds = (rows || []).map(function (r) {
+        return r.requester_id === user.id ? r.receiver_id : r.requester_id;
+      });
+
+      if (otherIds.length === 0) {
+        listEl.innerHTML = '<p class="empty-state">No connections yet \u2014 accepted requests will show up here.</p>';
+        return;
+      }
+
+      const { data: profiles } = await supabaseClient
+        .from("profiles")
+        .select("id, full_name, school_name, level, avatar_url")
+        .in("id", otherIds);
+
+      // Batch-fetch interests for everyone shown, one query instead of
+      // one per person.
+      const { data: interestRows } = await supabaseClient
+        .from("profile_interests")
+        .select("profile_id, interests(name)")
+        .in("profile_id", otherIds);
+
+      const interestsByProfile = {};
+      (interestRows || []).forEach(function (row) {
+        if (!row.interests) return;
+        if (!interestsByProfile[row.profile_id]) interestsByProfile[row.profile_id] = [];
+        interestsByProfile[row.profile_id].push(row.interests.name);
+      });
+
+      listEl.innerHTML = "";
+      (profiles || []).forEach(function (p) {
+        const card = document.createElement("div");
+        card.className = "connect-card";
+
+        const avatarHtml = p.avatar_url
+          ? '<img src="' + p.avatar_url + '" alt="" class="connect-avatar-img">'
+          : (p.full_name || "?").charAt(0).toUpperCase();
+
+        const interests = interestsByProfile[p.id] || [];
+        const interestsText = interests.length > 0
+          ? interests.slice(0, 3).join(", ")
+          : "";
+
+        card.innerHTML =
+          '<div class="connect-avatar">' + avatarHtml + '</div>' +
+          '<div class="connect-info">' +
+            '<p class="connect-name">' + escapeHtml(p.full_name) + '</p>' +
+            '<p class="connect-school">' + escapeHtml(p.school_name || "") + (p.level ? ' \u00B7 ' + escapeHtml(p.level) : '') + '</p>' +
+            (interestsText ? '<p class="connect-shared">' + escapeHtml(interestsText) + '</p>' : '') +
+          '</div>' +
+          '<span class="connected-badge">Connected</span>';
+        listEl.appendChild(card);
       });
     }
 
