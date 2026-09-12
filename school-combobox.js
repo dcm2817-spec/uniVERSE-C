@@ -13,6 +13,16 @@
   const MAX_RESULTS = 8;
   let activeIndex = -1;
 
+  function debounce(fn, delay) {
+    let timer;
+    return function () {
+      const args = arguments;
+      const ctx = this;
+      clearTimeout(timer);
+      timer = setTimeout(function () { fn.apply(ctx, args); }, delay);
+    };
+  }
+
   function renderOptions(query) {
     activeIndex = -1;
     const q = query.trim().toLowerCase();
@@ -95,11 +105,11 @@
     renderOptions(input.value);
   });
 
-  input.addEventListener("input", function () {
+  input.addEventListener("input", debounce(function () {
     // Typing again invalidates any prior selection (including "Other").
     hidden.value = "";
     renderOptions(input.value);
-  });
+  }, 120));
 
   list.addEventListener("click", function (e) {
     const li = e.target.closest(".combobox-option");

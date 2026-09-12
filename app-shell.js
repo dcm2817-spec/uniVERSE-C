@@ -5,6 +5,98 @@
   const view = document.getElementById("app-view");
   const navItems = document.querySelectorAll(".nav-item");
 
+  // ---------- Shared helpers ----------
+
+  function showToast(message) {
+    let toast = document.getElementById("app-toast");
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.id = "app-toast";
+      toast.className = "app-toast";
+      document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    toast.classList.add("is-visible");
+    clearTimeout(toast._hideTimer);
+    toast._hideTimer = setTimeout(function () {
+      toast.classList.remove("is-visible");
+    }, 2500);
+  }
+
+  function debounce(fn, delay) {
+    let timer;
+    return function () {
+      const args = arguments;
+      const ctx = this;
+      clearTimeout(timer);
+      timer = setTimeout(function () { fn.apply(ctx, args); }, delay);
+    };
+  }
+
+  function skeletonHTML(count) {
+    let html = '<div class="skeleton-group">';
+    for (let i = 0; i < (count || 3); i++) {
+      html += '<div class="skeleton-card"><div class="skeleton-line w-60"></div><div class="skeleton-line w-90"></div><div class="skeleton-line w-40"></div></div>';
+    }
+    return html + '</div>';
+  }
+
+  // Sub-views reached from Profile (My groups, Settings, Downloaded, My
+  // connections, group detail) support real back-navigation: opening one
+  // pushes a history entry, and the browser/hardware back button, the
+  // Escape key, or the visible close (\u2715) all just call history.back() —
+  // one popstate handler (registered once here, not per-render) does the
+  // actual showing/hiding, keyed off location.hash.
+  const SUBVIEW_HASHES = ["#groups", "#group-detail", "#settings", "#downloads", "#connections"];
+  let subviewPopHandler = null;
+
+  function openSubView(hash, mainEl, viewEl, afterOpen) {
+    mainEl.hidden = true;
+    viewEl.hidden = false;
+    history.pushState({ universeSubview: hash }, "", hash);
+    if (afterOpen) afterOpen();
+  }
+
+  function registerSubviewNav(mainEl, views) {
+    // views: { groups: el, settings: el, downloads: el, connections: el }
+    // reRenderGroups: called whenever landing back on #groups so stale
+    // group-detail content doesn't linger.
+    if (subviewPopHandler) window.removeEventListener("popstate", subviewPopHandler);
+
+    subviewPopHandler = function () {
+      const hash = window.location.hash;
+      Object.keys(views).forEach(function (key) {
+        if (views[key].el) views[key].el.hidden = true;
+      });
+
+      if (hash === "#groups" || hash === "#group-detail") {
+        mainEl.hidden = true;
+        views.groups.el.hidden = false;
+        if (hash === "#groups" && views.groups.onShow) views.groups.onShow();
+      } else if (hash === "#settings") {
+        mainEl.hidden = true;
+        views.settings.el.hidden = false;
+      } else if (hash === "#downloads") {
+        mainEl.hidden = true;
+        views.downloads.el.hidden = false;
+      } else if (hash === "#connections") {
+        mainEl.hidden = true;
+        views.connections.el.hidden = false;
+      } else {
+        mainEl.hidden = false;
+      }
+    };
+
+    window.addEventListener("popstate", subviewPopHandler);
+  }
+
+  // Escape key closes whichever sub-view is open, registered once.
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && SUBVIEW_HASHES.indexOf(window.location.hash) !== -1) {
+      history.back();
+    }
+  });
+
   const renderers = {
     feed: renderFeed,
     materials: renderMaterials,
@@ -50,7 +142,7 @@
         '<textarea id="feed-post-text" placeholder="Share something with your campus..." required></textarea>' +
         '<button type="submit" class="btn btn-primary btn-sm">Post</button>' +
       '</form>' +
-      '<div id="feed-list"><p class="empty-state">Loading feed...</p></div>';
+      '<div id="feed-list">' + skeletonHTML(3) + '</div>';
 
     const feedList = wrap.querySelector("#feed-list");
     let currentUser = null;
@@ -287,7 +379,7 @@
         '</div>' +
       '</form>' +
       '<input type="text" class="materials-search" placeholder="Search by course or title...">' +
-      '<div class="materials-list"><p class="empty-state">Loading materials...</p></div>';
+      '<div class="materials-list">' + skeletonHTML(3) + '</div>';
 
     const list = wrap.querySelector(".materials-list");
     const searchInput = wrap.querySelector(".materials-search");
@@ -381,7 +473,7 @@
 
     loadMaterials();
 
-    searchInput.addEventListener("input", function () {
+    searchInput.addEventListener("input", debounce(function () {
       const q = searchInput.value.trim().toLowerCase();
       const filtered = allMaterials.filter(function (m) {
         return (
@@ -391,7 +483,7 @@
         );
       });
       renderList(filtered);
-    });
+    }, 150));
 
     // ---------- Inline upload form ----------
 
@@ -478,6 +570,7 @@
       uploadForm.hidden = true;
       toggleBtn.hidden = false;
       loadMaterials();
+      showToast("Material uploaded");
     });
 
     return wrap;
@@ -494,7 +587,7 @@
       '<div id="requests-section"></div>' +
       '<div id="connected-section"></div>' +
       '<h3 class="connect-subheading">Suggested</h3>' +
-      '<div class="connect-list" id="suggested-list"><p class="empty-state">Loading...</p></div>';
+      '<div class="connect-list" id="suggested-list">' + skeletonHTML(3) + '</div>';
 
     const requestsSection = wrap.querySelector("#requests-section");
     const connectedSection = wrap.querySelector("#connected-section");
@@ -683,6 +776,7 @@
       }
 
       btn.textContent = "Requested";
+      showToast("Request sent");
     }
 
     async function respondToRequest(connectionId, status) {
@@ -936,6 +1030,7 @@
 
       editForm.hidden = true;
       displayCard.hidden = false;
+      showToast("Profile updated");
     });
 
     // ---------- My groups ----------
@@ -945,9 +1040,9 @@
 
     wrap.querySelector("#my-groups-link").addEventListener("click", function (e) {
       e.preventDefault();
-      profileMain.hidden = true;
-      groupsView.hidden = false;
-      renderGroupsList(groupsView);
+      openSubView("#groups", profileMain, groupsView, function () {
+        renderGroupsList(groupsView);
+      });
     });
 
     function escapeHtml(str) {
@@ -958,14 +1053,19 @@
 
     async function renderGroupsList(container) {
       container.innerHTML =
-        '<a href="#" class="back-link" id="groups-back">\u2190 Back to profile</a>' +
+        '<div class="subview-header">' +
+          '<a href="#" class="back-link" id="groups-back">\u2190 Back to profile</a>' +
+          '<button type="button" class="subview-close" id="groups-close" aria-label="Close">\u2715</button>' +
+        '</div>' +
         '<div class="view-heading"><h2>My groups</h2><p>Auto-joined based on your interests.</p></div>' +
-        '<div id="groups-list"><p class="empty-state">Loading...</p></div>';
+        '<div id="groups-list">' + skeletonHTML(3) + '</div>';
 
       container.querySelector("#groups-back").addEventListener("click", function (e) {
         e.preventDefault();
-        groupsView.hidden = true;
-        profileMain.hidden = false;
+        history.back();
+      });
+      container.querySelector("#groups-close").addEventListener("click", function () {
+        history.back();
       });
 
       const listEl = container.querySelector("#groups-list");
@@ -998,6 +1098,7 @@
           '<p class="group-name">' + escapeHtml(group.name) + '</p>' +
           '<p class="group-description">' + escapeHtml(group.description || "") + '</p>';
         card.addEventListener("click", function () {
+          history.pushState({ universeSubview: "#group-detail" }, "", "#group-detail");
           renderGroupDetail(groupsView, group);
         });
         listEl.appendChild(card);
@@ -1006,17 +1107,23 @@
 
     async function renderGroupDetail(container, group) {
       container.innerHTML =
-        '<a href="#" class="back-link" id="group-detail-back">\u2190 Back to my groups</a>' +
+        '<div class="subview-header">' +
+          '<a href="#" class="back-link" id="group-detail-back">\u2190 Back to my groups</a>' +
+          '<button type="button" class="subview-close" id="group-detail-close" aria-label="Close">\u2715</button>' +
+        '</div>' +
         '<div class="view-heading"><h2>' + escapeHtml(group.name) + '</h2><p>' + escapeHtml(group.description || "") + '</p></div>' +
         '<form class="group-post-form" id="group-post-form">' +
           '<textarea id="group-post-text" placeholder="Post something to this group..." required></textarea>' +
           '<button type="submit" class="btn btn-primary btn-sm">Post</button>' +
         '</form>' +
-        '<div id="group-posts-list"><p class="empty-state">Loading posts...</p></div>';
+        '<div id="group-posts-list">' + skeletonHTML(2) + '</div>';
 
       container.querySelector("#group-detail-back").addEventListener("click", function (e) {
         e.preventDefault();
-        renderGroupsList(groupsView);
+        history.back();
+      });
+      container.querySelector("#group-detail-close").addEventListener("click", function () {
+        history.back();
       });
 
       const postsList = container.querySelector("#group-posts-list");
@@ -1078,6 +1185,7 @@
         if (!error) {
           textarea.value = "";
           loadGroupPosts();
+          showToast("Posted to " + group.name);
         }
       });
     }
@@ -1088,9 +1196,9 @@
 
     wrap.querySelector("#settings-link").addEventListener("click", function (e) {
       e.preventDefault();
-      profileMain.hidden = true;
-      settingsView.hidden = false;
-      renderSettings(settingsView);
+      openSubView("#settings", profileMain, settingsView, function () {
+        renderSettings(settingsView);
+      });
     });
 
     async function renderSettings(container) {
@@ -1098,7 +1206,10 @@
       const user = userRes.user;
 
       container.innerHTML =
-        '<a href="#" class="back-link" id="settings-back">\u2190 Back to profile</a>' +
+        '<div class="subview-header">' +
+          '<a href="#" class="back-link" id="settings-back">\u2190 Back to profile</a>' +
+          '<button type="button" class="subview-close" id="settings-close" aria-label="Close">\u2715</button>' +
+        '</div>' +
         '<div class="view-heading"><h2>Settings</h2></div>' +
 
         '<h3 class="connect-subheading">Email</h3>' +
@@ -1142,8 +1253,10 @@
 
       container.querySelector("#settings-back").addEventListener("click", function (e) {
         e.preventDefault();
-        settingsView.hidden = true;
-        profileMain.hidden = false;
+        history.back();
+      });
+      container.querySelector("#settings-close").addEventListener("click", function () {
+        history.back();
       });
 
       // Change email
@@ -1179,6 +1292,7 @@
         errorEl.classList.remove("field-error");
         errorEl.classList.add("field-hint", "is-match");
         errorEl.textContent = "Check your new email for a confirmation link.";
+        showToast("Confirmation link sent");
       });
 
       // Change password
@@ -1231,6 +1345,7 @@
         errorEl.classList.remove("field-error");
         errorEl.classList.add("field-hint", "is-match");
         errorEl.textContent = "Password updated.";
+        showToast("Password updated");
       });
 
       // Sign out everywhere
@@ -1253,21 +1368,26 @@
 
     wrap.querySelector("#downloads-link").addEventListener("click", function (e) {
       e.preventDefault();
-      profileMain.hidden = true;
-      downloadsView.hidden = false;
-      renderDownloads(downloadsView);
+      openSubView("#downloads", profileMain, downloadsView, function () {
+        renderDownloads(downloadsView);
+      });
     });
 
     async function renderDownloads(container) {
       container.innerHTML =
-        '<a href="#" class="back-link" id="downloads-back">\u2190 Back to profile</a>' +
+        '<div class="subview-header">' +
+          '<a href="#" class="back-link" id="downloads-back">\u2190 Back to profile</a>' +
+          '<button type="button" class="subview-close" id="downloads-close" aria-label="Close">\u2715</button>' +
+        '</div>' +
         '<div class="view-heading"><h2>Downloaded</h2><p>Materials you\u2019ve downloaded, most recent first.</p></div>' +
-        '<div id="downloads-list"><p class="empty-state">Loading...</p></div>';
+        '<div id="downloads-list">' + skeletonHTML(3) + '</div>';
 
       container.querySelector("#downloads-back").addEventListener("click", function (e) {
         e.preventDefault();
-        downloadsView.hidden = true;
-        profileMain.hidden = false;
+        history.back();
+      });
+      container.querySelector("#downloads-close").addEventListener("click", function () {
+        history.back();
       });
 
       const listEl = container.querySelector("#downloads-list");
@@ -1329,21 +1449,26 @@
 
     wrap.querySelector("#connections-link").addEventListener("click", function (e) {
       e.preventDefault();
-      profileMain.hidden = true;
-      connectionsView.hidden = false;
-      renderMyConnections(connectionsView);
+      openSubView("#connections", profileMain, connectionsView, function () {
+        renderMyConnections(connectionsView);
+      });
     });
 
     async function renderMyConnections(container) {
       container.innerHTML =
-        '<a href="#" class="back-link" id="connections-back">\u2190 Back to profile</a>' +
+        '<div class="subview-header">' +
+          '<a href="#" class="back-link" id="connections-back">\u2190 Back to profile</a>' +
+          '<button type="button" class="subview-close" id="connections-close" aria-label="Close">\u2715</button>' +
+        '</div>' +
         '<div class="view-heading"><h2>My connections</h2><p>Everyone you\u2019re connected with.</p></div>' +
-        '<div id="connections-list"><p class="empty-state">Loading...</p></div>';
+        '<div id="connections-list">' + skeletonHTML(3) + '</div>';
 
       container.querySelector("#connections-back").addEventListener("click", function (e) {
         e.preventDefault();
-        connectionsView.hidden = true;
-        profileMain.hidden = false;
+        history.back();
+      });
+      container.querySelector("#connections-close").addEventListener("click", function () {
+        history.back();
       });
 
       const listEl = container.querySelector("#connections-list");
@@ -1415,6 +1540,23 @@
       });
     }
 
+    // One popstate handler covers every sub-view above — registered
+    // fresh each time Profile is opened (and the previous one removed),
+    // so back/forward/Escape all resolve correctly no matter which
+    // sub-view is currently showing.
+    registerSubviewNav(profileMain, {
+      groups: { el: groupsView, onShow: function () { renderGroupsList(groupsView); } },
+      settings: { el: settingsView },
+      downloads: { el: downloadsView },
+      connections: { el: connectionsView },
+    });
+
+    // If Profile is opened while a sub-view hash is already in the URL
+    // (e.g. reloaded mid-navigation), clear it so Profile starts clean.
+    if (SUBVIEW_HASHES.indexOf(window.location.hash) !== -1) {
+      history.replaceState(null, "", window.location.pathname);
+    }
+
     return wrap;
   }
 
@@ -1469,7 +1611,7 @@
         '<h4>Notifications</h4>' +
         '<button type="button" class="notif-mark-all" id="notif-mark-all">Mark all read</button>' +
       '</div>' +
-      '<div id="notif-items"><p class="empty-state">Loading...</p></div>';
+      '<div id="notif-items">' + skeletonHTML(3) + '</div>';
 
     const { data: userRes } = await supabaseClient.auth.getUser();
     const user = userRes.user;
