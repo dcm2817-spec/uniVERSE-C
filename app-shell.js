@@ -181,7 +181,7 @@
 
       const { data: posts } = await supabaseClient
         .from("posts")
-        .select("id, content, created_at, author_id, profiles(full_name)")
+        .select("id, content, created_at, updated_at, author_id, profiles(full_name)")
         .is("group_id", null)
         .eq("school_id", mySchoolId)
         .order("created_at", { ascending: false })
@@ -199,8 +199,10 @@
           kind: "post",
           id: p.id,
           author: p.profiles ? p.profiles.full_name : "Member",
+          author_id: p.author_id,
           content: p.content,
           created_at: p.created_at,
+          updated_at: p.updated_at,
         };
       });
 
@@ -263,26 +265,97 @@
 
         const isLiked = likedPostIds.has(item.id);
         const count = likeCounts[item.id] || 0;
+        const isMine = item.author_id === currentUser.id;
+        const editedTag = item.updated_at ? ' <span class="edited-tag">(edited)</span>' : '';
 
         card.innerHTML =
           '<div class="feed-card-top">' +
             '<span class="feed-tag feed-tag-discussion">Post</span>' +
-            '<span class="feed-school">' + timeAgo(item.created_at) + '</span>' +
+            '<span class="feed-school">' + timeAgo(item.created_at) + editedTag + '</span>' +
           '</div>' +
           '<p class="feed-author">' + escapeHtml(item.author) + '</p>' +
-          '<p class="feed-text">' + escapeHtml(item.content) + '</p>' +
+          '<p class="feed-text" id="post-text-' + item.id + '">' + escapeHtml(item.content) + '</p>' +
           '<div class="feed-actions">' +
             '<button type="button" class="like-btn' + (isLiked ? ' is-liked' : '') + '" data-post-id="' + item.id + '">' +
               (isLiked ? '&#9829;' : '&#9825;') + ' <span class="like-count">' + count + '</span>' +
             '</button>' +
+            (isMine ? '<button type="button" class="post-edit-btn">Edit</button><button type="button" class="post-delete-btn">Delete</button>' : '') +
           '</div>';
 
         card.querySelector(".like-btn").addEventListener("click", function () {
           toggleLike(item.id, card.querySelector(".like-btn"));
         });
 
+        if (isMine) {
+          card.querySelector(".post-edit-btn").addEventListener("click", function () {
+            startEditPost(item, card);
+          });
+          card.querySelector(".post-delete-btn").addEventListener("click", function () {
+            deletePost(item, card);
+          });
+        }
+
         feedList.appendChild(card);
       });
+    }
+
+    function startEditPost(item, card) {
+      const textEl = card.querySelector("#post-text-" + item.id);
+      const original = item.content;
+      const actionsRow = card.querySelector(".feed-actions");
+      if (actionsRow) actionsRow.hidden = true;
+
+      textEl.outerHTML =
+        '<div class="post-edit-form" id="post-edit-' + item.id + '">' +
+          '<textarea class="post-edit-textarea">' + escapeHtml(original) + '</textarea>' +
+          '<div class="upload-actions">' +
+            '<button type="button" class="btn btn-ghost btn-sm post-edit-cancel">Cancel</button>' +
+            '<button type="button" class="btn btn-primary btn-sm post-edit-save">Save</button>' +
+          '</div>' +
+        '</div>';
+
+      const formEl = card.querySelector("#post-edit-" + item.id);
+      const textarea = formEl.querySelector(".post-edit-textarea");
+
+      formEl.querySelector(".post-edit-cancel").addEventListener("click", function () {
+        loadFeed();
+      });
+
+      formEl.querySelector(".post-edit-save").addEventListener("click", async function () {
+        const newContent = textarea.value.trim();
+        if (!newContent) return;
+
+        const saveBtn = formEl.querySelector(".post-edit-save");
+        saveBtn.disabled = true;
+        saveBtn.textContent = "Saving...";
+
+        const { error } = await supabaseClient
+          .from("posts")
+          .update({ content: newContent })
+          .eq("id", item.id);
+
+        if (!error) {
+          showToast("Post updated");
+          loadFeed();
+        } else {
+          saveBtn.disabled = false;
+          saveBtn.textContent = "Save";
+        }
+      });
+    }
+
+    async function deletePost(item, card) {
+      if (!window.confirm("Delete this post? This can't be undone.")) return;
+
+      const { error } = await supabaseClient
+        .from("posts")
+        .delete()
+        .eq("id", item.id);
+
+      if (!error) {
+        card.remove();
+        showToast("Post deleted");
+      }
     }
 
     async function toggleLike(postId, btn) {
@@ -1131,7 +1204,7 @@
       async function loadGroupPosts() {
         const { data, error } = await supabaseClient
           .from("posts")
-          .select("id, content, created_at, author_id, profiles(full_name)")
+          .select("id, content, created_at, updated_at, author_id, profiles(full_name)")
           .eq("group_id", group.id)
           .order("created_at", { ascending: false });
 
@@ -1150,11 +1223,83 @@
           const card = document.createElement("div");
           card.className = "feed-card";
           const authorName = post.profiles ? post.profiles.full_name : "Member";
+          const isMine = post.author_id === currentUser.id;
+          const editedTag = post.updated_at ? ' <span class="edited-tag">(edited)</span>' : '';
+
           card.innerHTML =
-            '<p class="feed-author">' + escapeHtml(authorName) + '</p>' +
-            '<p class="feed-text">' + escapeHtml(post.content) + '</p>';
+            '<p class="feed-author">' + escapeHtml(authorName) + editedTag + '</p>' +
+            '<p class="feed-text" id="gpost-text-' + post.id + '">' + escapeHtml(post.content) + '</p>' +
+            (isMine ? '<div class="feed-actions"><button type="button" class="post-edit-btn">Edit</button><button type="button" class="post-delete-btn">Delete</button></div>' : '');
+
+          if (isMine) {
+            card.querySelector(".post-edit-btn").addEventListener("click", function () {
+              startEditGroupPost(post, card);
+            });
+            card.querySelector(".post-delete-btn").addEventListener("click", function () {
+              deleteGroupPost(post, card);
+            });
+          }
+
           postsList.appendChild(card);
         });
+      }
+
+      function startEditGroupPost(post, card) {
+        const textEl = card.querySelector("#gpost-text-" + post.id);
+        const original = post.content;
+        const actionsRow = card.querySelector(".feed-actions");
+        if (actionsRow) actionsRow.hidden = true;
+
+        textEl.outerHTML =
+          '<div class="post-edit-form" id="gpost-edit-' + post.id + '">' +
+            '<textarea class="post-edit-textarea">' + escapeHtml(original) + '</textarea>' +
+            '<div class="upload-actions">' +
+              '<button type="button" class="btn btn-ghost btn-sm gpost-edit-cancel">Cancel</button>' +
+              '<button type="button" class="btn btn-primary btn-sm gpost-edit-save">Save</button>' +
+            '</div>' +
+          '</div>';
+
+        const formEl = card.querySelector("#gpost-edit-" + post.id);
+        formEl.querySelector(".gpost-edit-cancel").addEventListener("click", function () {
+          loadGroupPosts();
+        });
+
+        formEl.querySelector(".gpost-edit-save").addEventListener("click", async function () {
+          const textarea = formEl.querySelector(".post-edit-textarea");
+          const newContent = textarea.value.trim();
+          if (!newContent) return;
+
+          const saveBtn = formEl.querySelector(".gpost-edit-save");
+          saveBtn.disabled = true;
+          saveBtn.textContent = "Saving...";
+
+          const { error } = await supabaseClient
+            .from("posts")
+            .update({ content: newContent })
+            .eq("id", post.id);
+
+          if (!error) {
+            showToast("Post updated");
+            loadGroupPosts();
+          } else {
+            saveBtn.disabled = false;
+            saveBtn.textContent = "Save";
+          }
+        });
+      }
+
+      async function deleteGroupPost(post, card) {
+        if (!window.confirm("Delete this post? This can't be undone.")) return;
+
+        const { error } = await supabaseClient
+          .from("posts")
+          .delete()
+          .eq("id", post.id);
+
+        if (!error) {
+          card.remove();
+          showToast("Post deleted");
+        }
       }
 
       loadGroupPosts();

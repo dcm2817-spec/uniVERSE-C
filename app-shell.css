@@ -272,6 +272,48 @@
   color: var(--ink-soft);
 }
 
+.post-edit-btn,
+.post-delete-btn {
+  background: none;
+  border: none;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.post-edit-btn { color: var(--indigo); }
+.post-delete-btn { color: var(--coral); }
+
+.edited-tag {
+  font-size: 10px;
+  font-weight: 500;
+  font-style: italic;
+  color: var(--ink-soft);
+}
+
+.post-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.post-edit-textarea {
+  width: 100%;
+  min-height: 60px;
+  background: var(--bg);
+  border: 2px solid var(--card-line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 15px;
+  font-family: var(--font-body);
+  color: var(--ink);
+  resize: vertical;
+}
+
+.post-edit-textarea:focus { border-color: var(--coral); }
+
 .like-btn {
   background: none;
   border: none;
