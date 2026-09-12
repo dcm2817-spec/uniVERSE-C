@@ -193,6 +193,119 @@ button, input, textarea, select { font-family: inherit; }
   font-size: 16px;
   color: var(--ink-soft);
   max-width: 46ch;
+  margin-bottom: 24px;
+}
+
+.btn-hero {
+  padding: 15px 30px;
+  font-size: 16px;
+  display: inline-block;
+}
+
+/* ---------- Problem section ---------- */
+
+.problem-section {
+  background: var(--indigo);
+  padding: 48px 24px;
+  margin: 12px 0 0;
+}
+
+.problem-inner {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.problem-section h2 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(24px, 5vw, 32px);
+  color: #fff;
+  margin-bottom: 20px;
+  letter-spacing: -0.01em;
+}
+
+.problem-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.problem-list li {
+  color: #EDE9F7;
+  font-size: 15px;
+  padding-left: 26px;
+  position: relative;
+  line-height: 1.5;
+}
+
+.problem-list li::before {
+  content: '\2715';
+  position: absolute;
+  left: 0;
+  top: 1px;
+  color: var(--yellow);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+/* ---------- Solution section ---------- */
+
+.solution-section {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 48px 24px 12px;
+  text-align: left;
+}
+
+.solution-section h2 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(24px, 5vw, 32px);
+  color: var(--ink);
+  margin-bottom: 8px;
+  letter-spacing: -0.01em;
+}
+
+.solution-sub {
+  font-size: 15px;
+  color: var(--ink-soft);
+  margin-bottom: 8px;
+}
+
+/* ---------- Closing CTA ---------- */
+
+.cta-section {
+  max-width: 720px;
+  margin: 20px auto 0;
+  padding: 52px 24px 60px;
+  text-align: center;
+}
+
+.cta-section h2 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(24px, 5vw, 32px);
+  color: var(--ink);
+  margin-bottom: 22px;
+  letter-spacing: -0.01em;
+}
+
+.cta-sub {
+  font-size: 14px;
+  color: var(--ink-soft);
+  margin-top: 16px;
+}
+
+.cta-sub a {
+  color: var(--coral);
+  font-weight: 700;
+}
+
+@media (max-width: 480px) {
+  .problem-section { padding: 36px 18px; margin-top: 8px; }
+  .solution-section { padding: 36px 18px 8px; }
+  .cta-section { padding: 40px 18px 48px; }
 }
 
 /* ---------- Sticker cards (feature cards) ---------- */
@@ -200,7 +313,7 @@ button, input, textarea, select { font-family: inherit; }
 .board {
   max-width: 1080px;
   margin: 0 auto;
-  padding: 12px 24px 64px;
+  padding: 20px 0 0;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 26px;
@@ -573,7 +686,7 @@ button, input, textarea, select { font-family: inherit; }
 @media (max-width: 480px) {
   .site-header { padding: 18px 18px; }
   .hero { margin: 32px auto 28px; padding: 0 18px; }
-  .board { padding: 6px 18px 44px; }
+  .board { padding: 14px 0 0; }
   .site-footer { padding: 0 18px 32px; }
   .footer-box { flex-direction: column; padding: 26px 22px; }
 }
