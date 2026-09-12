@@ -47,8 +47,16 @@
   // Escape key, or the visible close (\u2715) all just call history.back() —
   // one popstate handler (registered once here, not per-render) does the
   // actual showing/hiding, keyed off location.hash.
-  const SUBVIEW_HASHES = ["#groups", "#group-detail", "#settings", "#downloads", "#connections"];
+  const SUBVIEW_HASHES = ["#groups", "#group-detail", "#settings", "#downloads", "#connections", "#messages", "#message-thread"];
   let subviewPopHandler = null;
+
+  // Cross-view bridge: tapping "Message" on a connection card (in the
+  // Connect tab or Profile's My Connections) needs to switch to the
+  // Profile tab AND jump straight into that person's thread. Since each
+  // bottom-nav view is an independent render closure, this shared
+  // variable is how Connect hands off to Profile without them knowing
+  // about each other directly.
+  let pendingMessageTarget = null;
 
   function openSubView(hash, mainEl, viewEl, afterOpen) {
     mainEl.hidden = true;
@@ -82,6 +90,10 @@
       } else if (hash === "#connections") {
         mainEl.hidden = true;
         views.connections.el.hidden = false;
+      } else if (hash === "#messages" || hash === "#message-thread") {
+        mainEl.hidden = true;
+        views.messages.el.hidden = false;
+        if (hash === "#messages" && views.messages.onShow) views.messages.onShow();
       } else {
         mainEl.hidden = false;
       }
@@ -779,7 +791,14 @@
       connectedIds.forEach(function (id) {
         const person = otherProfiles[id];
         if (!person) return;
-        const card = personCard(person, '<span class="connected-badge">Connected</span>');
+        const card = personCard(person,
+          '<span class="connected-badge">Connected</span>' +
+          '<button type="button" class="btn btn-ghost btn-sm message-btn">Message</button>'
+        );
+        card.querySelector(".message-btn").addEventListener("click", function () {
+          pendingMessageTarget = { id: person.id, full_name: person.full_name };
+          document.querySelector('.nav-item[data-view="profile"]').click();
+        });
         connectedSection.appendChild(card);
       });
     }
@@ -913,6 +932,7 @@
         '<div class="profile-links">' +
           '<a href="#" class="profile-link" id="downloads-link">Downloaded</a>' +
           '<a href="#" class="profile-link" id="connections-link">My connections</a>' +
+          '<a href="#" class="profile-link" id="messages-link">Messages</a>' +
           '<a href="#" class="profile-link" id="my-groups-link">My groups</a>' +
           '<a href="#" class="profile-link" id="settings-link">Settings</a>' +
           '<a href="login.html" id="logout-link" class="profile-link profile-link-danger">Log out</a>' +
@@ -921,7 +941,8 @@
       '<div id="groups-view" hidden></div>' +
       '<div id="settings-view" hidden></div>' +
       '<div id="downloads-view" hidden></div>' +
-      '<div id="connections-view" hidden></div>';
+      '<div id="connections-view" hidden></div>' +
+      '<div id="messages-view" hidden></div>';
 
     const nameEl = wrap.querySelector("#profile-name");
     const schoolEl = wrap.querySelector("#profile-school-display");
@@ -1680,8 +1701,229 @@
             '<p class="connect-school">' + escapeHtml(p.school_name || "") + (p.level ? ' \u00B7 ' + escapeHtml(p.level) : '') + '</p>' +
             (interestsText ? '<p class="connect-shared">' + escapeHtml(interestsText) + '</p>' : '') +
           '</div>' +
-          '<span class="connected-badge">Connected</span>';
+          '<div class="connect-actions">' +
+            '<span class="connected-badge">Connected</span>' +
+            '<button type="button" class="btn btn-ghost btn-sm message-btn">Message</button>' +
+          '</div>';
+
+        card.querySelector(".message-btn").addEventListener("click", function () {
+          history.pushState({ universeSubview: "#message-thread" }, "", "#message-thread");
+          profileMain.hidden = true;
+          messagesView.hidden = false;
+          renderMessageThread(messagesView, p);
+        });
+
         listEl.appendChild(card);
+      });
+    }
+
+    // ---------- Messages ----------
+
+    const messagesView = wrap.querySelector("#messages-view");
+
+    wrap.querySelector("#messages-link").addEventListener("click", function (e) {
+      e.preventDefault();
+      openSubView("#messages", profileMain, messagesView, function () {
+        renderMessagesInbox(messagesView);
+      });
+    });
+
+    async function renderMessagesInbox(container) {
+      container.innerHTML =
+        '<div class="subview-header">' +
+          '<a href="#" class="back-link" id="messages-back">\u2190 Back to profile</a>' +
+          '<button type="button" class="subview-close" id="messages-close" aria-label="Close">\u2715</button>' +
+        '</div>' +
+        '<div class="view-heading"><h2>Messages</h2><p>Conversations with your connections.</p></div>' +
+        '<div id="conversations-list">' + skeletonHTML(3) + '</div>';
+
+      container.querySelector("#messages-back").addEventListener("click", function (e) {
+        e.preventDefault();
+        history.back();
+      });
+      container.querySelector("#messages-close").addEventListener("click", function () {
+        history.back();
+      });
+
+      const listEl = container.querySelector("#conversations-list");
+      const { data: userRes } = await supabaseClient.auth.getUser();
+      const me = userRes.user;
+
+      const { data: rows, error } = await supabaseClient
+        .from("messages")
+        .select("id, sender_id, receiver_id, content, created_at, read_at")
+        .or("sender_id.eq." + me.id + ",receiver_id.eq." + me.id)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        listEl.innerHTML = '<p class="empty-state">Couldn\u2019t load messages right now.</p>';
+        return;
+      }
+
+      // Collapse to one entry per other-person, keeping their most
+      // recent message (the query is already newest-first, so the
+      // first time we see a given person is their latest message).
+      const byPerson = {};
+      const order = [];
+      (rows || []).forEach(function (m) {
+        const otherId = m.sender_id === me.id ? m.receiver_id : m.sender_id;
+        if (!byPerson[otherId]) {
+          byPerson[otherId] = m;
+          order.push(otherId);
+        }
+      });
+
+      if (order.length === 0) {
+        listEl.innerHTML = '<p class="empty-state">No conversations yet \u2014 message someone from My connections.</p>';
+        return;
+      }
+
+      const { data: profiles } = await supabaseClient
+        .from("profiles")
+        .select("id, full_name, avatar_url")
+        .in("id", order);
+
+      const profileById = {};
+      (profiles || []).forEach(function (p) { profileById[p.id] = p; });
+
+      listEl.innerHTML = "";
+      order.forEach(function (otherId) {
+        const p = profileById[otherId];
+        if (!p) return;
+        const lastMsg = byPerson[otherId];
+        const isUnread = lastMsg.receiver_id === me.id && !lastMsg.read_at;
+
+        const avatarHtml = p.avatar_url
+          ? '<img src="' + p.avatar_url + '" alt="" class="connect-avatar-img">'
+          : (p.full_name || "?").charAt(0).toUpperCase();
+
+        const card = document.createElement("div");
+        card.className = "connect-card";
+        card.style.cursor = "pointer";
+        card.innerHTML =
+          '<div class="connect-avatar">' + avatarHtml + '</div>' +
+          '<div class="connect-info">' +
+            '<p class="connect-name">' + escapeHtml(p.full_name) + (isUnread ? ' <span class="unread-dot"></span>' : '') + '</p>' +
+            '<p class="connect-shared">' + escapeHtml(lastMsg.content.slice(0, 40)) + (lastMsg.content.length > 40 ? '\u2026' : '') + '</p>' +
+          '</div>';
+        card.addEventListener("click", function () {
+          history.pushState({ universeSubview: "#message-thread" }, "", "#message-thread");
+          renderMessageThread(messagesView, p);
+        });
+        listEl.appendChild(card);
+      });
+    }
+
+    async function renderMessageThread(container, otherProfile) {
+      container.innerHTML =
+        '<div class="subview-header">' +
+          '<a href="#" class="back-link" id="thread-back">\u2190 Back to messages</a>' +
+          '<button type="button" class="subview-close" id="thread-close" aria-label="Close">\u2715</button>' +
+        '</div>' +
+        '<div class="view-heading"><h2>' + escapeHtml(otherProfile.full_name) + '</h2></div>' +
+        '<div id="thread-messages" class="thread-messages">' + skeletonHTML(2) + '</div>' +
+        '<form class="thread-form" id="thread-form">' +
+          '<input type="text" id="thread-input" placeholder="Message ' + escapeHtml(otherProfile.full_name.split(" ")[0]) + '..." required autocomplete="off">' +
+          '<button type="submit" class="btn btn-primary btn-sm">Send</button>' +
+        '</form>';
+
+      container.querySelector("#thread-back").addEventListener("click", function (e) {
+        e.preventDefault();
+        history.back();
+      });
+      container.querySelector("#thread-close").addEventListener("click", function () {
+        history.back();
+      });
+
+      const messagesEl = container.querySelector("#thread-messages");
+      const { data: userRes } = await supabaseClient.auth.getUser();
+      const me = userRes.user;
+
+      async function loadThread() {
+        const { data, error } = await supabaseClient
+          .from("messages")
+          .select("id, sender_id, receiver_id, content, created_at, read_at")
+          .or(
+            "and(sender_id.eq." + me.id + ",receiver_id.eq." + otherProfile.id + ")," +
+            "and(sender_id.eq." + otherProfile.id + ",receiver_id.eq." + me.id + ")"
+          )
+          .order("created_at", { ascending: true });
+
+        if (error) {
+          messagesEl.innerHTML = '<p class="empty-state">Couldn\u2019t load this conversation.</p>';
+          return;
+        }
+
+        if (!data || data.length === 0) {
+          messagesEl.innerHTML = '<p class="empty-state">Say hello \u2014 no messages yet.</p>';
+        } else {
+          messagesEl.innerHTML = "";
+          data.forEach(function (m) {
+            const bubble = document.createElement("div");
+            bubble.className = "thread-bubble " + (m.sender_id === me.id ? "is-mine" : "is-theirs");
+            bubble.textContent = m.content;
+            messagesEl.appendChild(bubble);
+          });
+          messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+
+        // Mark any messages they sent me as read, now that I've opened the thread.
+        const unreadIds = (data || [])
+          .filter(function (m) { return m.receiver_id === me.id && !m.read_at; })
+          .map(function (m) { return m.id; });
+
+        if (unreadIds.length > 0) {
+          supabaseClient
+            .from("messages")
+            .update({ read_at: new Date().toISOString() })
+            .in("id", unreadIds)
+            .then(function () { refreshNotifBadge(); });
+        }
+      }
+
+      await loadThread();
+
+      container.querySelector("#thread-form").addEventListener("submit", async function (e) {
+        e.preventDefault();
+
+        const input = container.querySelector("#thread-input");
+        const content = input.value.trim();
+        if (!content) return;
+
+        const submitBtn = e.target.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+
+        const { error } = await supabaseClient.from("messages").insert({
+          sender_id: me.id,
+          receiver_id: otherProfile.id,
+          content: content,
+        });
+
+        submitBtn.disabled = false;
+
+        if (!error) {
+          input.value = "";
+          loadThread();
+        }
+      });
+    }
+
+    // If Profile is opened while a sub-view hash is already in the URL
+    // (e.g. reloaded mid-navigation), clear it so Profile starts clean.
+    // This must run BEFORE the pending-message-target check below, or
+    // it would immediately wipe out the hash that check pushes.
+    if (SUBVIEW_HASHES.indexOf(window.location.hash) !== -1 && !pendingMessageTarget) {
+      history.replaceState(null, "", window.location.pathname);
+    }
+
+    // If a "Message" button elsewhere (Connect tab, My Connections) set
+    // a pending target, jump straight into that thread instead of the
+    // inbox list — this is how Profile hands off across tabs.
+    if (pendingMessageTarget) {
+      const target = pendingMessageTarget;
+      pendingMessageTarget = null;
+      openSubView("#message-thread", profileMain, messagesView, function () {
+        renderMessageThread(messagesView, target);
       });
     }
 
@@ -1694,13 +1936,8 @@
       settings: { el: settingsView },
       downloads: { el: downloadsView },
       connections: { el: connectionsView },
+      messages: { el: messagesView },
     });
-
-    // If Profile is opened while a sub-view hash is already in the URL
-    // (e.g. reloaded mid-navigation), clear it so Profile starts clean.
-    if (SUBVIEW_HASHES.indexOf(window.location.hash) !== -1) {
-      history.replaceState(null, "", window.location.pathname);
-    }
 
     return wrap;
   }
