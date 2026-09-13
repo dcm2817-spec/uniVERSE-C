@@ -41,6 +41,119 @@
     return html + '</div>';
   }
 
+  // Shared "Report" flow — used for posts, group posts, and people.
+  // Opens a tiny inline reason picker anchored under the trigger button;
+  // submitting inserts a row into `reports` and shows a toast. No admin
+  // UI reads this back — reviewing reports happens directly in the
+  // Supabase dashboard table editor.
+  function openReportPopover(triggerBtn, targetType, targetId) {
+    const existing = document.querySelector(".report-popover");
+    if (existing) existing.remove();
+
+    const popover = document.createElement("div");
+    popover.className = "report-popover";
+    popover.innerHTML =
+      '<p class="report-popover-title">Report this ' + (targetType === "profile" ? "person" : "post") + '</p>' +
+      '<select class="report-reason">' +
+        '<option value="Spam">Spam</option>' +
+        '<option value="Harassment">Harassment or bullying</option>' +
+        '<option value="Inappropriate content">Inappropriate content</option>' +
+        '<option value="Other">Other</option>' +
+      '</select>' +
+      '<textarea class="report-details" placeholder="Add detail (optional)"></textarea>' +
+      '<div class="upload-actions">' +
+        '<button type="button" class="btn btn-ghost btn-sm report-cancel">Cancel</button>' +
+        '<button type="button" class="btn btn-primary btn-sm report-submit">Submit</button>' +
+      '</div>';
+
+    document.body.appendChild(popover);
+    const rect = triggerBtn.getBoundingClientRect();
+    popover.style.position = "fixed";
+    popover.style.top = Math.min(rect.bottom + 6, window.innerHeight - 220) + "px";
+    popover.style.left = Math.max(12, Math.min(rect.left, window.innerWidth - 260)) + "px";
+
+    function close() { popover.remove(); }
+
+    popover.querySelector(".report-cancel").addEventListener("click", close);
+
+    popover.querySelector(".report-submit").addEventListener("click", async function () {
+      const reason = popover.querySelector(".report-reason").value;
+      const details = popover.querySelector(".report-details").value.trim();
+
+      const { data: userRes } = await supabaseClient.auth.getUser();
+      const user = userRes.user;
+      if (!user) { close(); return; }
+
+      await supabaseClient.from("reports").insert({
+        reporter_id: user.id,
+        target_type: targetType,
+        target_id: targetId,
+        reason: reason,
+        details: details || null,
+      });
+
+      close();
+      showToast("Report submitted");
+    });
+
+    setTimeout(function () {
+      document.addEventListener("click", function onOutside(e) {
+        if (!popover.contains(e.target) && e.target !== triggerBtn) {
+          close();
+          document.removeEventListener("click", onOutside);
+        }
+      });
+    }, 0);
+  }
+
+  // Small "⋮" menu shared by any card showing a person — Report or
+  // Block. Kept separate from the report popover since it offers two
+  // actions, not one form. Reused by Connect's connected list and
+  // Profile's My Connections.
+  function openPersonMenu(triggerBtn, person, onBlocked) {
+    const existing = document.querySelector(".person-menu");
+    if (existing) existing.remove();
+
+    const menu = document.createElement("div");
+    menu.className = "person-menu";
+    menu.innerHTML =
+      '<button type="button" class="person-menu-item person-menu-report">Report</button>' +
+      '<button type="button" class="person-menu-item person-menu-block">Block</button>';
+
+    document.body.appendChild(menu);
+    const rect = triggerBtn.getBoundingClientRect();
+    menu.style.position = "fixed";
+    menu.style.top = Math.min(rect.bottom + 4, window.innerHeight - 100) + "px";
+    menu.style.left = Math.max(12, Math.min(rect.left - 100, window.innerWidth - 160)) + "px";
+
+    function close() { menu.remove(); }
+
+    menu.querySelector(".person-menu-report").addEventListener("click", function () {
+      close();
+      openReportPopover(triggerBtn, "profile", person.id);
+    });
+
+    menu.querySelector(".person-menu-block").addEventListener("click", async function () {
+      close();
+      if (!window.confirm("Block " + person.full_name + "? They won't be able to message you, and you won't see each other on Connect.")) return;
+
+      const { data: userRes } = await supabaseClient.auth.getUser();
+      const user = userRes.user;
+      await supabaseClient.from("blocked_users").insert({ blocker_id: user.id, blocked_id: person.id });
+      showToast(person.full_name + " blocked");
+      if (onBlocked) onBlocked();
+    });
+
+    setTimeout(function () {
+      document.addEventListener("click", function onOutside(e) {
+        if (!menu.contains(e.target) && e.target !== triggerBtn) {
+          close();
+          document.removeEventListener("click", onOutside);
+        }
+      });
+    }, 0);
+  }
+
   // Sub-views reached from Profile (My groups, Settings, Downloaded, My
   // connections, group detail) support real back-navigation: opening one
   // pushes a history entry, and the browser/hardware back button, the
@@ -291,7 +404,7 @@
             '<button type="button" class="like-btn' + (isLiked ? ' is-liked' : '') + '" data-post-id="' + item.id + '">' +
               (isLiked ? '&#9829;' : '&#9825;') + ' <span class="like-count">' + count + '</span>' +
             '</button>' +
-            (isMine ? '<button type="button" class="post-edit-btn">Edit</button><button type="button" class="post-delete-btn">Delete</button>' : '') +
+            (isMine ? '<button type="button" class="post-edit-btn">Edit</button><button type="button" class="post-delete-btn">Delete</button>' : '<button type="button" class="post-report-btn">Report</button>') +
           '</div>';
 
         card.querySelector(".like-btn").addEventListener("click", function () {
@@ -304,6 +417,10 @@
           });
           card.querySelector(".post-delete-btn").addEventListener("click", function () {
             deletePost(item, card);
+          });
+        } else {
+          card.querySelector(".post-report-btn").addEventListener("click", function (e) {
+            openReportPopover(e.target, "post", item.id);
           });
         }
 
@@ -719,15 +836,23 @@
 
       const rows = myConnections || [];
 
+      const { data: blockedRows } = await supabaseClient
+        .from("blocked_users")
+        .select("blocked_id")
+        .eq("blocker_id", currentUser.id);
+      const blockedIds = new Set((blockedRows || []).map(function (r) { return r.blocked_id; }));
+
       // Anyone already involved in a connection row, regardless of
       // status, is excluded from "Suggested" — pending/accepted/declined
       // are all shown in their own section instead of being re-suggested.
-      const excludeIds = new Set();
+      // Blocked people are excluded everywhere on this tab entirely.
+      const excludeIds = new Set(blockedIds);
       const incomingRequests = []; // { connectionId, otherId }
       const connectedIds = [];
 
       rows.forEach(function (row) {
         const otherId = row.requester_id === currentUser.id ? row.receiver_id : row.requester_id;
+        if (blockedIds.has(otherId)) return;
         excludeIds.add(otherId);
         if (row.status === "accepted") {
           connectedIds.push(otherId);
@@ -793,11 +918,15 @@
         if (!person) return;
         const card = personCard(person,
           '<span class="connected-badge">Connected</span>' +
-          '<button type="button" class="btn btn-ghost btn-sm message-btn">Message</button>'
+          '<button type="button" class="btn btn-ghost btn-sm message-btn">Message</button>' +
+          '<button type="button" class="card-more-btn" aria-label="More options">\u22ee</button>'
         );
         card.querySelector(".message-btn").addEventListener("click", function () {
           pendingMessageTarget = { id: person.id, full_name: person.full_name };
           document.querySelector('.nav-item[data-view="profile"]').click();
+        });
+        card.querySelector(".card-more-btn").addEventListener("click", function (e) {
+          openPersonMenu(e.target, person, function () { loadConnectData(); });
         });
         connectedSection.appendChild(card);
       });
@@ -1250,7 +1379,9 @@
           card.innerHTML =
             '<p class="feed-author">' + escapeHtml(authorName) + editedTag + '</p>' +
             '<p class="feed-text" id="gpost-text-' + post.id + '">' + escapeHtml(post.content) + '</p>' +
-            (isMine ? '<div class="feed-actions"><button type="button" class="post-edit-btn">Edit</button><button type="button" class="post-delete-btn">Delete</button></div>' : '');
+            (isMine
+              ? '<div class="feed-actions"><button type="button" class="post-edit-btn">Edit</button><button type="button" class="post-delete-btn">Delete</button></div>'
+              : '<div class="feed-actions"><button type="button" class="post-report-btn">Report</button></div>');
 
           if (isMine) {
             card.querySelector(".post-edit-btn").addEventListener("click", function () {
@@ -1258,6 +1389,10 @@
             });
             card.querySelector(".post-delete-btn").addEventListener("click", function () {
               deleteGroupPost(post, card);
+            });
+          } else {
+            card.querySelector(".post-report-btn").addEventListener("click", function (e) {
+              openReportPopover(e.target, "post", post.id);
             });
           }
 
@@ -1415,7 +1550,10 @@
         '<h3 class="connect-subheading">Sessions</h3>' +
         '<p class="field-hint" style="margin-bottom: 10px;">If you think someone else might have access to your account, sign out everywhere at once.</p>' +
         '<button type="button" class="btn btn-ghost btn-sm" id="signout-everywhere-btn">Log out of all devices</button>' +
-        '<p class="field-hint" id="signout-everywhere-msg"></p>';
+        '<p class="field-hint" id="signout-everywhere-msg"></p>' +
+
+        '<h3 class="connect-subheading">Blocked users</h3>' +
+        '<div id="blocked-list">' + skeletonHTML(1) + '</div>';
 
       container.querySelector("#settings-back").addEventListener("click", function (e) {
         e.preventDefault();
@@ -1526,6 +1664,48 @@
         msgEl.textContent = "Signed out everywhere. Redirecting to log in...";
         setTimeout(function () { window.location.href = "login.html"; }, 1200);
       });
+
+      // Blocked users
+      const blockedListEl = container.querySelector("#blocked-list");
+
+      const { data: blockedRows } = await supabaseClient
+        .from("blocked_users")
+        .select("blocked_id")
+        .eq("blocker_id", user.id);
+
+      const blockedIds = (blockedRows || []).map(function (r) { return r.blocked_id; });
+
+      if (blockedIds.length === 0) {
+        blockedListEl.innerHTML = '<p class="empty-state">You haven\u2019t blocked anyone.</p>';
+      } else {
+        const { data: blockedProfiles } = await supabaseClient
+          .from("profiles")
+          .select("id, full_name")
+          .in("id", blockedIds);
+
+        blockedListEl.innerHTML = "";
+        (blockedProfiles || []).forEach(function (p) {
+          const row = document.createElement("div");
+          row.className = "connect-card";
+          row.innerHTML =
+            '<div class="connect-avatar">' + (p.full_name || "?").charAt(0).toUpperCase() + '</div>' +
+            '<div class="connect-info"><p class="connect-name">' + escapeHtml(p.full_name) + '</p></div>' +
+            '<button type="button" class="btn btn-ghost btn-sm unblock-btn">Unblock</button>';
+          row.querySelector(".unblock-btn").addEventListener("click", async function () {
+            await supabaseClient
+              .from("blocked_users")
+              .delete()
+              .eq("blocker_id", user.id)
+              .eq("blocked_id", p.id);
+            showToast(p.full_name + " unblocked");
+            row.remove();
+            if (blockedListEl.children.length === 0) {
+              blockedListEl.innerHTML = '<p class="empty-state">You haven\u2019t blocked anyone.</p>';
+            }
+          });
+          blockedListEl.appendChild(row);
+        });
+      }
     }
 
     // ---------- Downloaded ----------
@@ -1656,7 +1836,14 @@
         return r.requester_id === user.id ? r.receiver_id : r.requester_id;
       });
 
-      if (otherIds.length === 0) {
+      const { data: blockedRows } = await supabaseClient
+        .from("blocked_users")
+        .select("blocked_id")
+        .eq("blocker_id", user.id);
+      const blockedIds = new Set((blockedRows || []).map(function (r) { return r.blocked_id; }));
+      const visibleIds = otherIds.filter(function (id) { return !blockedIds.has(id); });
+
+      if (visibleIds.length === 0) {
         listEl.innerHTML = '<p class="empty-state">No connections yet \u2014 accepted requests will show up here.</p>';
         return;
       }
@@ -1664,14 +1851,14 @@
       const { data: profiles } = await supabaseClient
         .from("profiles")
         .select("id, full_name, school_name, level, avatar_url")
-        .in("id", otherIds);
+        .in("id", visibleIds);
 
       // Batch-fetch interests for everyone shown, one query instead of
       // one per person.
       const { data: interestRows } = await supabaseClient
         .from("profile_interests")
         .select("profile_id, interests(name)")
-        .in("profile_id", otherIds);
+        .in("profile_id", visibleIds);
 
       const interestsByProfile = {};
       (interestRows || []).forEach(function (row) {
@@ -1704,6 +1891,7 @@
           '<div class="connect-actions">' +
             '<span class="connected-badge">Connected</span>' +
             '<button type="button" class="btn btn-ghost btn-sm message-btn">Message</button>' +
+            '<button type="button" class="card-more-btn" aria-label="More options">\u22ee</button>' +
           '</div>';
 
         card.querySelector(".message-btn").addEventListener("click", function () {
@@ -1711,6 +1899,9 @@
           profileMain.hidden = true;
           messagesView.hidden = false;
           renderMessageThread(messagesView, p);
+        });
+        card.querySelector(".card-more-btn").addEventListener("click", function (e) {
+          openPersonMenu(e.target, p, function () { renderMyConnections(container); });
         });
 
         listEl.appendChild(card);
@@ -1773,7 +1964,14 @@
         }
       });
 
-      if (order.length === 0) {
+      const { data: blockedRows } = await supabaseClient
+        .from("blocked_users")
+        .select("blocked_id")
+        .eq("blocker_id", me.id);
+      const blockedIds = new Set((blockedRows || []).map(function (r) { return r.blocked_id; }));
+      const visibleOrder = order.filter(function (id) { return !blockedIds.has(id); });
+
+      if (visibleOrder.length === 0) {
         listEl.innerHTML = '<p class="empty-state">No conversations yet \u2014 message someone from My connections.</p>';
         return;
       }
@@ -1781,13 +1979,13 @@
       const { data: profiles } = await supabaseClient
         .from("profiles")
         .select("id, full_name, avatar_url")
-        .in("id", order);
+        .in("id", visibleOrder);
 
       const profileById = {};
       (profiles || []).forEach(function (p) { profileById[p.id] = p; });
 
       listEl.innerHTML = "";
-      order.forEach(function (otherId) {
+      visibleOrder.forEach(function (otherId) {
         const p = profileById[otherId];
         if (!p) return;
         const lastMsg = byPerson[otherId];
@@ -1818,7 +2016,10 @@
       container.innerHTML =
         '<div class="subview-header">' +
           '<a href="#" class="back-link" id="thread-back">\u2190 Back to messages</a>' +
-          '<button type="button" class="subview-close" id="thread-close" aria-label="Close">\u2715</button>' +
+          '<div style="display:flex; gap:8px; align-items:center;">' +
+            '<button type="button" class="card-more-btn" id="thread-more-btn" aria-label="More options">\u22ee</button>' +
+            '<button type="button" class="subview-close" id="thread-close" aria-label="Close">\u2715</button>' +
+          '</div>' +
         '</div>' +
         '<div class="view-heading"><h2>' + escapeHtml(otherProfile.full_name) + '</h2></div>' +
         '<div id="thread-messages" class="thread-messages">' + skeletonHTML(2) + '</div>' +
@@ -1833,6 +2034,9 @@
       });
       container.querySelector("#thread-close").addEventListener("click", function () {
         history.back();
+      });
+      container.querySelector("#thread-more-btn").addEventListener("click", function (e) {
+        openPersonMenu(e.target, otherProfile, function () { history.back(); });
       });
 
       const messagesEl = container.querySelector("#thread-messages");

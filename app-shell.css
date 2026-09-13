@@ -637,6 +637,91 @@
 
 /* ---------- Groups ---------- */
 
+.card-more-btn {
+  background: none;
+  border: none;
+  font-size: 16px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  padding: 4px 6px;
+  flex-shrink: 0;
+}
+
+.person-menu {
+  background: var(--card);
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+  box-shadow: 4px 4px 0 var(--sticker-shadow);
+  overflow: hidden;
+  z-index: 200;
+  min-width: 120px;
+}
+
+.person-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.person-menu-item:hover { background: var(--bg); }
+.person-menu-block { color: var(--coral); }
+
+.report-popover {
+  background: var(--card);
+  border: 2px solid var(--ink);
+  border-radius: 14px;
+  box-shadow: 4px 4px 0 var(--sticker-shadow);
+  padding: 14px;
+  width: 240px;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.report-popover-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.report-reason {
+  background: var(--bg);
+  border: 2px solid var(--card-line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.report-details {
+  background: var(--bg);
+  border: 2px solid var(--card-line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 13px;
+  min-height: 50px;
+  resize: vertical;
+  font-family: var(--font-body);
+}
+
+.post-report-btn {
+  background: none;
+  border: none;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  cursor: pointer;
+  padding: 4px 0;
+}
+
 .subview-header {
   display: flex;
   align-items: center;
