@@ -32,6 +32,17 @@
 
   document.title = post.title + " — uniVERSE Blog";
 
+  const setMeta = function (id, attr, value) {
+    const el = document.getElementById(id);
+    if (el) el.setAttribute(attr, value);
+  };
+  setMeta("meta-description", "content", post.excerpt);
+  setMeta("meta-og-title", "content", post.title);
+  setMeta("meta-og-description", "content", post.excerpt);
+  setMeta("meta-og-url", "content", "https://project-1-seven-self.vercel.app/blog-post.html?slug=" + encodeURIComponent(post.slug));
+  setMeta("meta-twitter-title", "content", post.title);
+  setMeta("meta-twitter-description", "content", post.excerpt);
+
   const paragraphsHtml = post.content
     .map(function (para) { return "<p>" + escapeHtml(para) + "</p>"; })
     .join("");

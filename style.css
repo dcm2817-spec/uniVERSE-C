@@ -4,7 +4,10 @@
    Type: Unbounded (display) + Manrope (body) — no monospace, no eyebrows
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&family=Manrope:wght@400;500;600;700&display=swap');
+/* Fonts (Unbounded, Manrope) are loaded via <link rel="preconnect"> +
+   <link rel="stylesheet"> in each page's <head>, not @import — @import
+   blocks CSSOM construction and adds an extra discovery round-trip
+   the browser can't parallelize with other resources. */
 
 :root {
   --bg: #FAF8F5;
@@ -125,8 +128,20 @@ button, input, textarea, select { font-family: inherit; }
   border-radius: 999px;
   border: 2px solid transparent;
   cursor: pointer;
-  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
   white-space: nowrap;
+}
+
+@media (hover: hover) {
+  .btn:hover {
+    transform: translateY(-2px);
+  }
+  .btn-primary:hover {
+    box-shadow: 0 4px 0 var(--coral-deep);
+  }
+  .btn-ghost:hover {
+    box-shadow: 0 4px 0 var(--indigo);
+  }
 }
 
 .btn:active { transform: scale(0.96); }
