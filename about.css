@@ -1,0 +1,83 @@
+/* ============================================================
+   uniVERSE — about page
+   Built on the same tokens/identity as style.css
+   ============================================================ */
+
+.about-wrap {
+  max-width: 640px;
+  margin: 40px auto 60px;
+  padding: 0 24px;
+}
+
+.about-card {
+  background: var(--card);
+  border: 2px solid var(--ink);
+  border-radius: 20px;
+  padding: 40px 32px;
+  text-align: center;
+  position: relative;
+}
+
+.about-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 20px;
+  background: var(--coral);
+  transform: translate(8px, 8px);
+  z-index: -1;
+}
+
+.about-avatar {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+  margin: 0 auto 20px;
+  border: 4px solid var(--yellow);
+}
+
+.about-card h1 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(24px, 5vw, 30px);
+  color: var(--ink);
+  margin-bottom: 28px;
+  letter-spacing: -0.01em;
+}
+
+.about-body {
+  text-align: left;
+}
+
+.about-body p {
+  font-size: 15.5px;
+  line-height: 1.7;
+  color: var(--ink);
+  margin-bottom: 18px;
+}
+
+.about-emphasis {
+  font-weight: 700;
+  font-size: 17px !important;
+  color: var(--coral);
+}
+
+.about-whatsapp {
+  display: inline-block;
+  margin-top: 12px;
+}
+
+.about-signoff {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--ink-soft);
+  margin-top: 20px;
+}
+
+@media (max-width: 480px) {
+  .about-wrap { margin: 28px auto 44px; padding: 0 18px; }
+  .about-card { padding: 30px 22px; }
+}
