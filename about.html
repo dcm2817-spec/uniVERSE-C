@@ -27,9 +27,12 @@
 
 <header class="site-header">
   <a href="index.html" class="wordmark" aria-label="uniVERSE home">
-    <span class="u">u</span><span class="n">n</span><span class="i">i</span><span class="v-cap">V</span><span class="rest">erse</span>
+    <span class="u">u</span><span class="n">n</span><span class="i">i</span><span class="v-cap">V</span><span class="rest">ERSE</span>
   </a>
-  <nav class="header-actions">
+  <button class="nav-toggle" id="nav-toggle" aria-label="Menu" aria-expanded="false">
+    <span></span><span></span><span></span>
+  </button>
+  <nav class="header-actions" id="header-actions">
     <a href="blog.html" class="btn btn-ghost">Blog</a>
     <a href="login.html" class="btn btn-ghost">Log in</a>
     <a href="register.html" class="btn btn-primary">Register</a>
@@ -55,7 +58,8 @@
       <p>If something's broken, or missing, or just annoying you, tell me. Not a support ticket. Me.</p>
     </div>
 
-    <a href="https://wa.me/2348084734611" target="_blank" rel="noopener" class="btn btn-primary btn-hero about-whatsapp">Message me on WhatsApp</a>
+    <a href="register.html" class="btn btn-primary btn-hero about-cta">Join uniVERSE</a>
+    <a href="https://wa.me/2348084734611" target="_blank" rel="noopener" class="btn btn-ghost about-whatsapp">Message me on WhatsApp</a>
 
     <p class="about-signoff">Marvforge</p>
   </section>
@@ -74,5 +78,6 @@
   </div>
 </footer>
 
+<script src="nav.js"></script>
 </body>
 </html>

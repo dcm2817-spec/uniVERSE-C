@@ -70,6 +70,7 @@ button, input, textarea, select { font-family: inherit; }
   padding: 22px 24px;
   max-width: 1080px;
   margin: 0 auto;
+  position: relative;
 }
 
 .wordmark {
@@ -108,6 +109,68 @@ button, input, textarea, select { font-family: inherit; }
   display: flex;
   gap: 10px;
   align-items: center;
+}
+
+.nav-toggle {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+  width: 38px;
+  height: 38px;
+  background: var(--card);
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.nav-toggle span {
+  display: block;
+  width: 16px;
+  height: 2px;
+  background: var(--ink);
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.nav-toggle.is-active span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+.nav-toggle.is-active span:nth-child(2) { opacity: 0; }
+.nav-toggle.is-active span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+@media (max-width: 640px) {
+  .nav-toggle { display: flex; }
+
+  .header-actions {
+    display: none;
+    position: absolute;
+    top: calc(100% - 6px);
+    right: 24px;
+    left: 24px;
+    background: var(--card);
+    border: 2px solid var(--ink);
+    border-radius: 16px;
+    box-shadow: 6px 6px 0 var(--sticker-shadow);
+    padding: 12px;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 100;
+  }
+
+  .header-actions.is-open {
+    display: flex;
+  }
+
+  .header-actions .btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .header-actions .auth-hint {
+    text-align: center;
+    padding: 8px 0;
+  }
 }
 
 .auth-hint {

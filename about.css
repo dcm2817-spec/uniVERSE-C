@@ -64,9 +64,14 @@
   color: var(--coral);
 }
 
-.about-whatsapp {
+.about-cta {
   display: inline-block;
   margin-top: 12px;
+}
+
+.about-whatsapp {
+  display: inline-block;
+  margin-top: 10px;
 }
 
 .about-signoff {
