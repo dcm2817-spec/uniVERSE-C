@@ -158,6 +158,6 @@
 
     // Account created — the handle_new_user trigger in Supabase has
     // already inserted the matching row into public.profiles.
-    window.location.href = "onboarding.html";
+    window.location.href = "/onboarding";
   });
 })();

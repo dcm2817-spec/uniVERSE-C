@@ -67,7 +67,7 @@
     sorted.forEach(function (post) {
       const card = document.createElement("a");
       card.className = "note blog-card";
-      card.href = "blog-post.html?slug=" + encodeURIComponent(post.slug);
+      card.href = "/blog-post?slug=" + encodeURIComponent(post.slug);
       card.innerHTML =
         '<span class="tag">' + escapeHtml(post.category) + '</span>' +
         '<h3>' + escapeHtml(post.title) + '</h3>' +

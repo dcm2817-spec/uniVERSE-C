@@ -23,7 +23,7 @@
 
   if (!post) {
     wrap.innerHTML =
-      '<a href="blog.html" class="back-link-static">\u2190 Back to blog</a>' +
+      '<a href="/blog" class="back-link-static">\u2190 Back to blog</a>' +
       '<h1 class="post-title">Post not found</h1>' +
       '<p class="post-meta">That post doesn\u2019t exist or may have been moved.</p>';
     document.title = "Post not found — uniVERSE Blog";
@@ -39,7 +39,7 @@
   setMeta("meta-description", "content", post.excerpt);
   setMeta("meta-og-title", "content", post.title);
   setMeta("meta-og-description", "content", post.excerpt);
-  setMeta("meta-og-url", "content", "https://project-1-seven-self.vercel.app/blog-post.html?slug=" + encodeURIComponent(post.slug));
+  setMeta("meta-og-url", "content", "https://project-1-seven-self.vercel.app/blog-post?slug=" + encodeURIComponent(post.slug));
   setMeta("meta-twitter-title", "content", post.title);
   setMeta("meta-twitter-description", "content", post.excerpt);
 
@@ -48,10 +48,10 @@
     .join("");
 
   wrap.innerHTML =
-    '<a href="blog.html" class="back-link-static">\u2190 Back to blog</a>' +
+    '<a href="/blog" class="back-link-static">\u2190 Back to blog</a>' +
     '<span class="tag post-category-tag">' + escapeHtml(post.category) + '</span>' +
     '<h1 class="post-title">' + escapeHtml(post.title) + '</h1>' +
     '<p class="post-meta">' + formatDate(post.date) + '</p>' +
     '<div class="post-body">' + paragraphsHtml + '</div>' +
-    '<a href="register.html" class="btn btn-primary btn-hero post-cta">Join uniVERSE</a>';
+    '<a href="/register" class="btn btn-primary btn-hero post-cta">Join uniVERSE</a>';
 })();

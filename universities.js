@@ -1,5 +1,5 @@
 // uniVERSE — Nigerian universities dataset
-// Used by the searchable school picker on register.html (and later,
+// Used by the searchable school picker on /register (and later,
 // campus-specific grouping/feeds — e.g. "ASF UNIBEN", "UNILAG Fellowship").
 //
 // Fields:

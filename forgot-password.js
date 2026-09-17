@@ -34,14 +34,42 @@
 
   identifier.addEventListener("blur", validateIdentifier);
 
-  form.addEventListener("submit", function (e) {
+  form.addEventListener("submit", async function (e) {
     e.preventDefault();
     if (!validateIdentifier()) return;
 
-    // Backend not wired yet — once connected, this is where the reset
-    // email/SMS actually gets triggered via Supabase Auth.
+    const submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Sending...";
+
+    const value = identifier.value.trim();
+    const isEmail = value.includes("@");
+
+    let targetEmail = value;
+
+    if (!isEmail) {
+      // They typed a phone number — resolve it to the real email on file.
+      const { data: resolvedEmail } = await supabaseClient.rpc(
+        "get_email_by_phone",
+        { p_phone: value }
+      );
+      targetEmail = resolvedEmail;
+    }
+
+    // Always show the same confirmation message whether or not a match
+    // was found — this avoids revealing which phone numbers/emails are
+    // registered to someone probing the form.
+    if (targetEmail) {
+      await supabaseClient.auth.resetPasswordForEmail(targetEmail, {
+        redirectTo: window.location.origin + "/reset-password",
+      });
+    }
+
+    submitBtn.disabled = false;
+    submitBtn.textContent = "Recover password";
+
     confirmText.textContent =
-      "If an account matches \u201c" + identifier.value.trim() + "\u201d, a password reset link is on its way.";
+      "If an account matches \u201c" + value + "\u201d, a password reset link is on its way.";
 
     requestCard.hidden = true;
     confirmCard.hidden = false;

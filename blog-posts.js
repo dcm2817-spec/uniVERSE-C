@@ -1,6 +1,6 @@
 // uniVERSE — blog posts
-// Single source of truth for both blog.html (listing) and
-// blog-post.html (single post view, matched by slug).
+// Single source of truth for both /blog (listing) and
+// /blog-post (single post view, matched by slug).
 //
 // To add a new post: add an object to this array. No build step,
 // no CMS — just edit this file and re-upload it.

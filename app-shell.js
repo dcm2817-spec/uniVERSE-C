@@ -1064,7 +1064,7 @@
           '<a href="#" class="profile-link" id="messages-link">Messages</a>' +
           '<a href="#" class="profile-link" id="my-groups-link">My groups</a>' +
           '<a href="#" class="profile-link" id="settings-link">Settings</a>' +
-          '<a href="login.html" id="logout-link" class="profile-link profile-link-danger">Log out</a>' +
+          '<a href="/login" id="logout-link" class="profile-link profile-link-danger">Log out</a>' +
         '</div>' +
       '</div>' +
       '<div id="groups-view" hidden></div>' +
@@ -1662,7 +1662,7 @@
         await supabaseClient.auth.signOut({ scope: "global" });
 
         msgEl.textContent = "Signed out everywhere. Redirecting to log in...";
-        setTimeout(function () { window.location.href = "login.html"; }, 1200);
+        setTimeout(function () { window.location.href = "/login"; }, 1200);
       });
 
       // Blocked users
@@ -2151,7 +2151,7 @@
     if (e.target && e.target.id === "logout-link") {
       e.preventDefault();
       supabaseClient.auth.signOut().finally(function () {
-        window.location.href = "login.html";
+        window.location.href = "/login";
       });
     }
   });

@@ -15,14 +15,14 @@
   });
 
   skipBtn.addEventListener("click", function () {
-    window.location.href = "app.html";
+    window.location.href = "/app";
   });
 
   continueBtn.addEventListener("click", async function () {
     const selectedIds = picker ? picker.getSelected() : [];
 
     if (selectedIds.length === 0) {
-      window.location.href = "app.html";
+      window.location.href = "/app";
       return;
     }
 
@@ -33,7 +33,7 @@
     const user = userRes.user;
 
     if (!user) {
-      window.location.href = "app.html";
+      window.location.href = "/app";
       return;
     }
 
@@ -47,10 +47,10 @@
       errorEl.textContent = "Something went wrong saving your interests — you can add them later in Profile.";
       continueBtn.disabled = false;
       continueBtn.textContent = "Continue";
-      setTimeout(function () { window.location.href = "app.html"; }, 1800);
+      setTimeout(function () { window.location.href = "/app"; }, 1800);
       return;
     }
 
-    window.location.href = "app.html";
+    window.location.href = "/app";
   });
 })();
