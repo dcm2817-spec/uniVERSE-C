@@ -154,6 +154,109 @@
     }, 0);
   }
 
+  // Shared comment thread — expands/collapses under any post card (Feed
+  // or a group post). The card must have a "[hidden] .comment-thread"
+  // container and a ".comment-toggle-btn .comment-count" span already
+  // in its markup; this fills both in and wires the add-comment form.
+  function escapeHtmlGlobal(str) {
+    const div = document.createElement("div");
+    div.textContent = str || "";
+    return div.innerHTML;
+  }
+
+  function commentTimeAgo(dateStr) {
+    const diffMs = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diffMs / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return mins + "m";
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return hrs + "h";
+    return Math.floor(hrs / 24) + "d";
+  }
+
+  async function toggleCommentThread(postId, card, currentUser) {
+    const thread = card.querySelector(".comment-thread");
+    if (!thread) return;
+
+    if (!thread.hidden) {
+      thread.hidden = true;
+      return;
+    }
+
+    thread.hidden = false;
+    thread.innerHTML = skeletonHTML(1);
+
+    async function loadComments() {
+      const { data, error } = await supabaseClient
+        .from("comments")
+        .select("id, content, created_at, author_id, profiles(full_name)")
+        .eq("post_id", postId)
+        .order("created_at", { ascending: true });
+
+      if (error) {
+        thread.innerHTML = '<p class="empty-state">Couldn\u2019t load comments.</p>';
+        return;
+      }
+
+      const countEl = card.querySelector(".comment-count");
+      if (countEl) countEl.textContent = String((data || []).length);
+
+      let listHtml = '<div class="comment-list">';
+      (data || []).forEach(function (c) {
+        const isMine = c.author_id === currentUser.id;
+        const authorName = c.profiles ? c.profiles.full_name : "Member";
+        listHtml +=
+          '<div class="comment-item" data-comment-id="' + c.id + '">' +
+            '<p class="comment-author">' + escapeHtmlGlobal(authorName) + ' <span class="comment-time">\u00B7 ' + commentTimeAgo(c.created_at) + '</span></p>' +
+            '<p class="comment-text">' + escapeHtmlGlobal(c.content) + '</p>' +
+            (isMine ? '<button type="button" class="comment-delete-btn" data-comment-id="' + c.id + '">Delete</button>' : '') +
+          '</div>';
+      });
+      listHtml += '</div>';
+
+      listHtml +=
+        '<form class="comment-form">' +
+          '<input type="text" class="comment-input" placeholder="Write a comment..." required autocomplete="off">' +
+          '<button type="submit" class="btn btn-primary btn-sm">Post</button>' +
+        '</form>';
+
+      thread.innerHTML = listHtml;
+
+      thread.querySelectorAll(".comment-delete-btn").forEach(function (btn) {
+        btn.addEventListener("click", async function () {
+          if (!window.confirm("Delete this comment?")) return;
+          await supabaseClient.from("comments").delete().eq("id", btn.dataset.commentId);
+          loadComments();
+        });
+      });
+
+      thread.querySelector(".comment-form").addEventListener("submit", async function (e) {
+        e.preventDefault();
+        const input = thread.querySelector(".comment-input");
+        const content = input.value.trim();
+        if (!content) return;
+
+        const submitBtn = e.target.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+
+        const { error: insertError } = await supabaseClient.from("comments").insert({
+          post_id: postId,
+          author_id: currentUser.id,
+          content: content,
+        });
+
+        submitBtn.disabled = false;
+
+        if (!insertError) {
+          input.value = "";
+          loadComments();
+        }
+      });
+    }
+
+    loadComments();
+  }
+
   // Sub-views reached from Profile (My groups, Settings, Downloaded, My
   // connections, group detail) support real back-navigation: opening one
   // pushes a history entry, and the browser/hardware back button, the
@@ -274,6 +377,7 @@
     let mySchoolId = null;
     let likedPostIds = new Set();
     let likeCounts = {};
+    let commentCounts = {};
 
     function escapeHtml(str) {
       const div = document.createElement("div");
@@ -359,6 +463,16 @@
           likeCounts[r.post_id] = (likeCounts[r.post_id] || 0) + 1;
           if (r.profile_id === currentUser.id) likedPostIds.add(r.post_id);
         });
+
+        const { data: commentRows } = await supabaseClient
+          .from("comments")
+          .select("post_id")
+          .in("post_id", postIds);
+
+        commentCounts = {};
+        (commentRows || []).forEach(function (c) {
+          commentCounts[c.post_id] = (commentCounts[c.post_id] || 0) + 1;
+        });
       }
 
       renderList(combined);
@@ -390,6 +504,7 @@
 
         const isLiked = likedPostIds.has(item.id);
         const count = likeCounts[item.id] || 0;
+        const cCount = commentCounts[item.id] || 0;
         const isMine = item.author_id === currentUser.id;
         const editedTag = item.updated_at ? ' <span class="edited-tag">(edited)</span>' : '';
 
@@ -404,11 +519,17 @@
             '<button type="button" class="like-btn' + (isLiked ? ' is-liked' : '') + '" data-post-id="' + item.id + '">' +
               (isLiked ? '&#9829;' : '&#9825;') + ' <span class="like-count">' + count + '</span>' +
             '</button>' +
+            '<button type="button" class="comment-toggle-btn">&#128172; <span class="comment-count">' + cCount + '</span></button>' +
             (isMine ? '<button type="button" class="post-edit-btn">Edit</button><button type="button" class="post-delete-btn">Delete</button>' : '<button type="button" class="post-report-btn">Report</button>') +
-          '</div>';
+          '</div>' +
+          '<div class="comment-thread" hidden></div>';
 
         card.querySelector(".like-btn").addEventListener("click", function () {
           toggleLike(item.id, card.querySelector(".like-btn"));
+        });
+
+        card.querySelector(".comment-toggle-btn").addEventListener("click", function () {
+          toggleCommentThread(item.id, card, currentUser);
         });
 
         if (isMine) {
@@ -1368,6 +1489,17 @@
           return;
         }
 
+        const groupPostIds = data.map(function (p) { return p.id; });
+        const { data: commentRows } = await supabaseClient
+          .from("comments")
+          .select("post_id")
+          .in("post_id", groupPostIds);
+
+        const groupCommentCounts = {};
+        (commentRows || []).forEach(function (c) {
+          groupCommentCounts[c.post_id] = (groupCommentCounts[c.post_id] || 0) + 1;
+        });
+
         postsList.innerHTML = "";
         data.forEach(function (post) {
           const card = document.createElement("div");
@@ -1379,9 +1511,17 @@
           card.innerHTML =
             '<p class="feed-author">' + escapeHtml(authorName) + editedTag + '</p>' +
             '<p class="feed-text" id="gpost-text-' + post.id + '">' + escapeHtml(post.content) + '</p>' +
-            (isMine
-              ? '<div class="feed-actions"><button type="button" class="post-edit-btn">Edit</button><button type="button" class="post-delete-btn">Delete</button></div>'
-              : '<div class="feed-actions"><button type="button" class="post-report-btn">Report</button></div>');
+            '<div class="feed-actions">' +
+              '<button type="button" class="comment-toggle-btn">&#128172; <span class="comment-count">' + (groupCommentCounts[post.id] || 0) + '</span></button>' +
+              (isMine
+                ? '<button type="button" class="post-edit-btn">Edit</button><button type="button" class="post-delete-btn">Delete</button>'
+                : '<button type="button" class="post-report-btn">Report</button>') +
+            '</div>' +
+            '<div class="comment-thread" hidden></div>';
+
+          card.querySelector(".comment-toggle-btn").addEventListener("click", function () {
+            toggleCommentThread(post.id, card, currentUser);
+          });
 
           if (isMine) {
             card.querySelector(".post-edit-btn").addEventListener("click", function () {

@@ -712,6 +712,82 @@
   font-family: var(--font-body);
 }
 
+.comment-toggle-btn {
+  background: none;
+  border: none;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+.comment-thread {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--card-line);
+}
+
+.comment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.comment-item {
+  background: var(--bg);
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+
+.comment-author {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.comment-time {
+  font-weight: 500;
+  color: var(--ink-soft);
+}
+
+.comment-text {
+  font-size: 13px;
+  color: var(--ink);
+  margin-top: 2px;
+}
+
+.comment-delete-btn {
+  background: none;
+  border: none;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--coral);
+  cursor: pointer;
+  padding: 4px 0 0;
+}
+
+.comment-form {
+  display: flex;
+  gap: 8px;
+}
+
+.comment-input {
+  flex: 1;
+  background: var(--bg);
+  border: 2px solid var(--card-line);
+  border-radius: 999px;
+  padding: 9px 14px;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.comment-input:focus { border-color: var(--coral); }
+
 .post-report-btn {
   background: none;
   border: none;
