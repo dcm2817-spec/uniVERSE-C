@@ -274,6 +274,18 @@
   // about each other directly.
   let pendingMessageTarget = null;
 
+  // Tracks the realtime subscription for whichever message thread is
+  // currently open, so it can be torn down before a new one starts
+  // (switching threads, or leaving Messages entirely) — otherwise
+  // subscriptions would pile up silently every time a thread opens.
+  let activeThreadChannel = null;
+  function unsubscribeThreadChannel() {
+    if (activeThreadChannel) {
+      supabaseClient.removeChannel(activeThreadChannel);
+      activeThreadChannel = null;
+    }
+  }
+
   function openSubView(hash, mainEl, viewEl, afterOpen) {
     mainEl.hidden = true;
     viewEl.hidden = false;
@@ -2060,6 +2072,8 @@
     });
 
     async function renderMessagesInbox(container) {
+      unsubscribeThreadChannel();
+
       container.innerHTML =
         '<div class="subview-header">' +
           '<a href="#" class="back-link" id="messages-back">\u2190 Back to profile</a>' +
@@ -2226,6 +2240,29 @@
       }
 
       await loadThread();
+
+      // Real-time: listen for any new message sent TO me, then check
+      // it's actually from the person I'm currently talking to before
+      // reacting — the subscription filter can only match one column,
+      // so the sender check happens here instead of in the filter.
+      unsubscribeThreadChannel();
+      activeThreadChannel = supabaseClient
+        .channel("thread-" + otherProfile.id)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "messages",
+            filter: "receiver_id=eq." + me.id,
+          },
+          function (payload) {
+            if (payload.new.sender_id === otherProfile.id) {
+              loadThread();
+            }
+          }
+        )
+        .subscribe();
 
       container.querySelector("#thread-form").addEventListener("submit", async function (e) {
         e.preventDefault();
